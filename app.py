@@ -20,7 +20,8 @@ FALLBACK_MESSAGE = "Information not available in policy documents."
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
 BASE_SCORE_THRESHOLD = 0.12
-PROCESS_QUERY_PATTERN = re.compile(r"\b(how\s+to|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
+PROCESS_QUERY_PATTERN = re.compile(r"\b(how\s+(to|can|do)|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
+QUANT_QUERY_PATTERN = re.compile(r"\bhow\s+many\b", re.IGNORECASE)
 PROCESS_DETAIL_PATTERN = re.compile(
     r"\b(step|submit|apply|form|portal|workflow|email|request|approval chain|approver)\b",
     re.IGNORECASE,
@@ -181,7 +182,10 @@ def is_answer_adequate(question: str, answer_text: str, score: float) -> bool:
     if score < BASE_SCORE_THRESHOLD:
         return False
 
-    if PROCESS_QUERY_PATTERN.search(question):
+    is_quant_query = QUANT_QUERY_PATTERN.search(question) is not None
+    is_process_query = PROCESS_QUERY_PATTERN.search(question) is not None
+
+    if is_process_query and not is_quant_query:
         return PROCESS_DETAIL_PATTERN.search(answer_text) is not None
 
     return True
