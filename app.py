@@ -7,9 +7,13 @@ from typing import List
 
 import numpy as np
 import streamlit as st
-from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    from sentence_transformers import SentenceTransformer
+except Exception:
+    SentenceTransformer = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -19,6 +23,7 @@ POLICY_FILES = {
     "travel_policy.txt": "Travel Policy",
 }
 FALLBACK_MESSAGE = "Information not available in policy documents."
+REQUIRE_SEMANTIC_RETRIEVAL = True
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
 BASE_SCORE_THRESHOLD = 0.25
@@ -81,12 +86,14 @@ def build_retriever(chunks: List[PolicyChunk]):
 
     model = None
     semantic_matrix = None
-    try:
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-        semantic_matrix = model.encode(corpus, normalize_embeddings=True)
-    except Exception:
-        model = None
-        semantic_matrix = None
+
+    if SentenceTransformer is not None:
+        try:
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            semantic_matrix = model.encode(corpus, normalize_embeddings=True)
+        except Exception:
+            model = None
+            semantic_matrix = None
 
     return vectorizer, tfidf_matrix, model, semantic_matrix
 
@@ -125,6 +132,12 @@ def find_best_match(question: str):
     semantic_scores = None
     semantic_available = model is not None and semantic_matrix is not None
 
+    if REQUIRE_SEMANTIC_RETRIEVAL and not semantic_available:
+        raise RuntimeError(
+            "Hybrid retrieval requires sentence-transformers model loading. "
+            "Please ensure dependencies are installed and redeploy."
+        )
+
     for variant in query_variants:
         q_tfidf_vec = vectorizer.transform([variant])
         current_tfidf = cosine_similarity(q_tfidf_vec, tfidf_matrix).flatten()
@@ -143,10 +156,7 @@ def find_best_match(question: str):
             if semantic_available:
                 semantic_scores = np.maximum(semantic_scores, current_semantic)
 
-    if semantic_available:
-        blended_scores = (SEMANTIC_WEIGHT * semantic_scores) + (TFIDF_WEIGHT * tfidf_scores)
-    else:
-        blended_scores = tfidf_scores
+    blended_scores = (SEMANTIC_WEIGHT * semantic_scores) + (TFIDF_WEIGHT * tfidf_scores)
 
     best_idx = int(blended_scores.argmax())
     best_score = float(blended_scores[best_idx])
@@ -204,7 +214,7 @@ def render_ui() -> None:
             <p style="margin:0.4rem 0 0 0;">
                 Ask questions from Leave, IT, and Travel policies. Answers are retrieved from policy documents only.
             </p>
-            <span class="badge">Hybrid: Semantic Embeddings + TF-IDF</span>
+            <span class="badge">Hybrid retrieval with TF-IDF fallback</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -224,20 +234,21 @@ def render_ui() -> None:
             if not question.strip():
                 st.warning("Please enter a question.")
             else:
-                match = find_best_match(question)
+                try:
+                    match = find_best_match(question)
+                except RuntimeError as exc:
+                    st.error(str(exc))
+                    return
                 if not match:
                     st.error(FALLBACK_MESSAGE)
                 else:
                     st.success(match["answer"])
                     st.info(f"Source document: {match['document']} ({match['document_file']})")
-                    if match["retrieval_mode"] == "hybrid":
-                        st.caption(
-                            f"Hybrid score: {match['score']:.3f} | "
-                            f"Semantic: {match['semantic_score']:.3f} | "
-                            f"TF-IDF: {match['tfidf_score']:.3f}"
-                        )
-                    else:
-                        st.caption(f"Fallback mode: TF-IDF only | Score: {match['tfidf_score']:.3f}")
+                    st.caption(
+                        f"Hybrid score: {match['score']:.3f} | "
+                        f"Semantic: {match['semantic_score']:.3f} | "
+                        f"TF-IDF: {match['tfidf_score']:.3f}"
+                    )
 
     with col2:
         st.subheader("Available Policies")

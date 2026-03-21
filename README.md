@@ -7,7 +7,7 @@ This project implements Assignment 2 using the provided policy documents:
 
 ## Retrieval Approach
 - Hybrid retrieval: semantic embeddings + TF-IDF cosine similarity
-- Deploy-safe fallback: if semantic model is unavailable, app auto-switches to TF-IDF mode
+- Hybrid mode is mandatory in this app (semantic + TF-IDF always enabled)
 - Retrieval-first answering from policy text only
 
 ## Required Assignment Compliance
@@ -32,14 +32,19 @@ This project implements Assignment 2 using the provided policy documents:
 2. Open Streamlit Community Cloud and create a new app.
 3. Set:
    - Main file path: `app.py`
-   - Python version: `3.12`
+   - Python version: `3.12` (pinned via `runtime.txt`)
 4. Click Deploy.
+
+### Note for Cloud Deploy
+- This app installs `sentence-transformers` to run hybrid retrieval in deployment.
+- First cloud build can take longer (typically 8-20 minutes) due dependency/model setup.
 
 ## Deployment-Ready Files in Repo
 - `app.py`
 - `requirements.txt`
 - `README.md`
 - `.gitignore`
+- `runtime.txt`
 - `leave_policy.txt`
 - `it_policy.txt`
 - `travel_policy.txt`
