@@ -6,7 +6,7 @@ This project implements Assignment 2 using the provided policy documents:
 - `travel_policy.txt`
 
 ## Retrieval Approach
-- Hybrid retrieval: LSA semantic similarity + TF-IDF cosine similarity
+- Hybrid retrieval: semantic intent expansion + TF-IDF cosine similarity
 - Hybrid mode is mandatory in this app (semantic + TF-IDF always enabled)
 - Retrieval-first answering from policy text only
 
@@ -36,8 +36,8 @@ This project implements Assignment 2 using the provided policy documents:
 4. Click Deploy.
 
 ### Note for Cloud Deploy
-- Semantic layer is implemented with lightweight scikit-learn LSA (no heavy model download).
-- Deployment is faster and more reliable on Streamlit Cloud.
+- Semantic layer uses lightweight rule-based intent expansion.
+- Deployment is fast and reliable on Streamlit Cloud (no heavy ML package build).
 
 ## Deployment-Ready Files in Repo
 - `app.py`

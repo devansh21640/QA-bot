@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import re
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from collections import Counter
+from typing import Dict, List, Set
 
-import numpy as np
 import streamlit as st
-from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,6 +43,61 @@ class PolicyChunk:
     text: str
 
 
+def tokenize(text: str) -> List[str]:
+    return re.findall(r"[a-zA-Z0-9]+", text.lower())
+
+
+def build_tfidf_vector(tokens: List[str], idf_map: Dict[str, float]) -> Dict[str, float]:
+    if not tokens:
+        return {}
+
+    term_counts = Counter(tokens)
+    total_terms = len(tokens)
+    vector: Dict[str, float] = {}
+    for token, count in term_counts.items():
+        if token not in idf_map:
+            continue
+        tf = count / total_terms
+        vector[token] = tf * idf_map[token]
+    return vector
+
+
+def cosine_sim_sparse(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float:
+    if not vec_a or not vec_b:
+        return 0.0
+
+    dot = 0.0
+    for key, value in vec_a.items():
+        dot += value * vec_b.get(key, 0.0)
+
+    norm_a = math.sqrt(sum(v * v for v in vec_a.values()))
+    norm_b = math.sqrt(sum(v * v for v in vec_b.values()))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def semantic_token_set(question: str) -> Set[str]:
+    tokens = set(tokenize(question))
+    expanded = set(tokens)
+    for term, replacements in QUERY_EXPANSIONS.items():
+        if term in tokens or term in question.lower():
+            expanded.add(term)
+            for replacement in replacements:
+                expanded.update(tokenize(replacement))
+    return expanded
+
+
+def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> float:
+    if not query_tokens or not chunk_tokens:
+        return 0.0
+    intersection = len(query_tokens.intersection(chunk_tokens))
+    union = len(query_tokens.union(chunk_tokens))
+    if union == 0:
+        return 0.0
+    return intersection / union
+
+
 @st.cache_data
 def load_policy_chunks() -> List[PolicyChunk]:
     chunks: List[PolicyChunk] = []
@@ -75,19 +128,21 @@ def load_policy_chunks() -> List[PolicyChunk]:
 
 @st.cache_resource
 def build_retriever(chunks: List[PolicyChunk]):
-    corpus = [chunk.text for chunk in chunks]
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english")
-    tfidf_matrix = vectorizer.fit_transform(corpus)
+    tokenized_chunks: List[List[str]] = [tokenize(chunk.text) for chunk in chunks]
 
-    max_components = min(tfidf_matrix.shape[0] - 1, tfidf_matrix.shape[1] - 1, 50)
-    n_components = max(2, max_components) if max_components >= 2 else 1
+    doc_freq: Counter = Counter()
+    for tokens in tokenized_chunks:
+        doc_freq.update(set(tokens))
 
-    semantic_model = TruncatedSVD(n_components=n_components, random_state=42)
-    semantic_matrix = semantic_model.fit_transform(tfidf_matrix)
-    semantic_norm = np.linalg.norm(semantic_matrix, axis=1, keepdims=True)
-    semantic_matrix = semantic_matrix / np.clip(semantic_norm, a_min=1e-12, a_max=None)
+    total_docs = len(tokenized_chunks)
+    idf_map: Dict[str, float] = {}
+    for token, frequency in doc_freq.items():
+        idf_map[token] = math.log((1 + total_docs) / (1 + frequency)) + 1.0
 
-    return vectorizer, tfidf_matrix, semantic_model, semantic_matrix
+    chunk_tfidf_vectors = [build_tfidf_vector(tokens, idf_map) for tokens in tokenized_chunks]
+    chunk_token_sets = [set(tokens) for tokens in tokenized_chunks]
+
+    return idf_map, chunk_tfidf_vectors, chunk_token_sets
 
 
 def build_query_variants(question: str) -> List[str]:
@@ -117,32 +172,29 @@ def find_best_match(question: str):
     if not chunks:
         return None
 
-    vectorizer, tfidf_matrix, semantic_model, semantic_matrix = build_retriever(chunks)
+    idf_map, chunk_tfidf_vectors, chunk_token_sets = build_retriever(chunks)
     query_variants = build_query_variants(question)
 
-    tfidf_scores = None
-    semantic_scores = None
+    tfidf_scores = [0.0] * len(chunks)
+    semantic_scores = [0.0] * len(chunks)
 
     for variant in query_variants:
-        q_tfidf_vec = vectorizer.transform([variant])
-        current_tfidf = cosine_similarity(q_tfidf_vec, tfidf_matrix).flatten()
+        query_tokens = tokenize(variant)
+        query_tfidf_vector = build_tfidf_vector(query_tokens, idf_map)
+        expanded_tokens = semantic_token_set(variant)
 
-        q_semantic_vec = semantic_model.transform(q_tfidf_vec)
-        q_semantic_vec = q_semantic_vec / np.clip(
-            np.linalg.norm(q_semantic_vec, axis=1, keepdims=True), a_min=1e-12, a_max=None
-        )
-        current_semantic = cosine_similarity(q_semantic_vec, semantic_matrix).flatten()
+        for idx in range(len(chunks)):
+            tfidf_score = cosine_sim_sparse(query_tfidf_vector, chunk_tfidf_vectors[idx])
+            semantic_score = semantic_overlap_score(expanded_tokens, chunk_token_sets[idx])
+            tfidf_scores[idx] = max(tfidf_scores[idx], tfidf_score)
+            semantic_scores[idx] = max(semantic_scores[idx], semantic_score)
 
-        if tfidf_scores is None:
-            tfidf_scores = current_tfidf
-            semantic_scores = current_semantic
-        else:
-            tfidf_scores = np.maximum(tfidf_scores, current_tfidf)
-            semantic_scores = np.maximum(semantic_scores, current_semantic)
+    blended_scores = [
+        (SEMANTIC_WEIGHT * semantic_scores[idx]) + (TFIDF_WEIGHT * tfidf_scores[idx])
+        for idx in range(len(chunks))
+    ]
 
-    blended_scores = (SEMANTIC_WEIGHT * semantic_scores) + (TFIDF_WEIGHT * tfidf_scores)
-
-    best_idx = int(blended_scores.argmax())
+    best_idx = max(range(len(chunks)), key=lambda i: blended_scores[i])
     best_score = float(blended_scores[best_idx])
 
     best_chunk = chunks[best_idx]
