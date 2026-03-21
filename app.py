@@ -98,9 +98,7 @@ def semantic_token_set(question: str) -> Set[str]:
             replacement_tokens.update(tokenize(replacement))
 
         if term in lowered or term in tokens or any(rep in lowered for rep in replacements) or any(rt in tokens for rt in replacement_tokens):
-            expanded.update(tokenize(term))
-            for replacement in replacements:
-                expanded.update(tokenize(replacement))
+            expanded.add(term)
 
     return expanded
 
@@ -114,7 +112,7 @@ def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> fl
         return 0.0
 
     intersection = len(query_tokens.intersection(chunk_filtered))
-    return intersection / max(1, len(query_tokens))
+    return (2 * intersection) / max(1, (len(query_tokens) + len(chunk_filtered)))
 
 
 @st.cache_data
