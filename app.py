@@ -28,6 +28,7 @@ PROCESS_DETAIL_PATTERN = re.compile(
 
 QUERY_EXPANSIONS = {
     "manager": ["managerial", "approval authority"],
+    "managerial": ["manager", "approval authority"],
     "approval": ["approve", "authorization", "sign-off"],
     "approve": ["approval", "authorization", "sign-off"],
     "remote": ["work from home", "wfh"],
@@ -112,7 +113,7 @@ def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> fl
         return 0.0
 
     intersection = len(query_tokens.intersection(chunk_filtered))
-    return (2 * intersection) / max(1, (len(query_tokens) + len(chunk_filtered)))
+    return intersection / max(1, min(len(query_tokens), len(chunk_filtered)))
 
 
 @st.cache_data
