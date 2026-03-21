@@ -7,13 +7,9 @@ from typing import List
 
 import numpy as np
 import streamlit as st
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-try:
-    from sentence_transformers import SentenceTransformer
-except Exception:
-    SentenceTransformer = None
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,7 +19,6 @@ POLICY_FILES = {
     "travel_policy.txt": "Travel Policy",
 }
 FALLBACK_MESSAGE = "Information not available in policy documents."
-REQUIRE_SEMANTIC_RETRIEVAL = True
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
 BASE_SCORE_THRESHOLD = 0.25
@@ -84,18 +79,15 @@ def build_retriever(chunks: List[PolicyChunk]):
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english")
     tfidf_matrix = vectorizer.fit_transform(corpus)
 
-    model = None
-    semantic_matrix = None
+    max_components = min(tfidf_matrix.shape[0] - 1, tfidf_matrix.shape[1] - 1, 50)
+    n_components = max(2, max_components) if max_components >= 2 else 1
 
-    if SentenceTransformer is not None:
-        try:
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            semantic_matrix = model.encode(corpus, normalize_embeddings=True)
-        except Exception:
-            model = None
-            semantic_matrix = None
+    semantic_model = TruncatedSVD(n_components=n_components, random_state=42)
+    semantic_matrix = semantic_model.fit_transform(tfidf_matrix)
+    semantic_norm = np.linalg.norm(semantic_matrix, axis=1, keepdims=True)
+    semantic_matrix = semantic_matrix / np.clip(semantic_norm, a_min=1e-12, a_max=None)
 
-    return vectorizer, tfidf_matrix, model, semantic_matrix
+    return vectorizer, tfidf_matrix, semantic_model, semantic_matrix
 
 
 def build_query_variants(question: str) -> List[str]:
@@ -125,36 +117,28 @@ def find_best_match(question: str):
     if not chunks:
         return None
 
-    vectorizer, tfidf_matrix, model, semantic_matrix = build_retriever(chunks)
+    vectorizer, tfidf_matrix, semantic_model, semantic_matrix = build_retriever(chunks)
     query_variants = build_query_variants(question)
 
     tfidf_scores = None
     semantic_scores = None
-    semantic_available = model is not None and semantic_matrix is not None
-
-    if REQUIRE_SEMANTIC_RETRIEVAL and not semantic_available:
-        raise RuntimeError(
-            "Hybrid retrieval requires sentence-transformers model loading. "
-            "Please ensure dependencies are installed and redeploy."
-        )
 
     for variant in query_variants:
         q_tfidf_vec = vectorizer.transform([variant])
         current_tfidf = cosine_similarity(q_tfidf_vec, tfidf_matrix).flatten()
 
-        if semantic_available:
-            q_semantic_vec = model.encode([variant], normalize_embeddings=True)
-            current_semantic = cosine_similarity(q_semantic_vec, semantic_matrix).flatten()
-        else:
-            current_semantic = None
+        q_semantic_vec = semantic_model.transform(q_tfidf_vec)
+        q_semantic_vec = q_semantic_vec / np.clip(
+            np.linalg.norm(q_semantic_vec, axis=1, keepdims=True), a_min=1e-12, a_max=None
+        )
+        current_semantic = cosine_similarity(q_semantic_vec, semantic_matrix).flatten()
 
         if tfidf_scores is None:
             tfidf_scores = current_tfidf
-            semantic_scores = current_semantic if semantic_available else np.zeros_like(current_tfidf)
+            semantic_scores = current_semantic
         else:
             tfidf_scores = np.maximum(tfidf_scores, current_tfidf)
-            if semantic_available:
-                semantic_scores = np.maximum(semantic_scores, current_semantic)
+            semantic_scores = np.maximum(semantic_scores, current_semantic)
 
     blended_scores = (SEMANTIC_WEIGHT * semantic_scores) + (TFIDF_WEIGHT * tfidf_scores)
 
@@ -170,9 +154,9 @@ def find_best_match(question: str):
         "document": best_chunk.document_name,
         "document_file": best_chunk.document_file,
         "score": best_score,
-        "semantic_score": float(semantic_scores[best_idx]) if semantic_available else 0.0,
+        "semantic_score": float(semantic_scores[best_idx]),
         "tfidf_score": float(tfidf_scores[best_idx]),
-        "retrieval_mode": "hybrid" if semantic_available else "tfidf_only",
+        "retrieval_mode": "hybrid",
     }
 
 
@@ -234,11 +218,7 @@ def render_ui() -> None:
             if not question.strip():
                 st.warning("Please enter a question.")
             else:
-                try:
-                    match = find_best_match(question)
-                except RuntimeError as exc:
-                    st.error(str(exc))
-                    return
+                match = find_best_match(question)
                 if not match:
                     st.error(FALLBACK_MESSAGE)
                 else:
