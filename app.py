@@ -113,7 +113,9 @@ def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> fl
         return 0.0
 
     intersection = len(query_tokens.intersection(chunk_filtered))
-    return intersection / max(1, min(len(query_tokens), len(chunk_filtered)))
+    coverage = intersection / max(1, len(query_tokens))
+    precision = intersection / max(1, len(chunk_filtered))
+    return min(1.0, (0.75 * coverage) + (0.25 * precision))
 
 
 @st.cache_data
