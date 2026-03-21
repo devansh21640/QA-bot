@@ -1,0 +1,7 @@
+IT Policy
+
+1. VPN is mandatory for remote work access.
+2. Employees must not share their passwords with anyone.
+3. Company-issued laptop must be used for official work.
+4. All devices must have updated antivirus software installed.
+5. External USB devices are not allowed without IT approval.
