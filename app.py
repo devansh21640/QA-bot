@@ -20,7 +20,7 @@ FALLBACK_MESSAGE = "Information not available in policy documents."
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
 BASE_SCORE_THRESHOLD = 0.12
-PROCESS_QUERY_PATTERN = re.compile(r"\b(how|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
+PROCESS_QUERY_PATTERN = re.compile(r"\b(how\s+to|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
 PROCESS_DETAIL_PATTERN = re.compile(
     r"\b(step|submit|apply|form|portal|workflow|email|request|approval chain|approver)\b",
     re.IGNORECASE,
