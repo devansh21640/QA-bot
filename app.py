@@ -198,7 +198,7 @@ def render_ui() -> None:
             <p style="margin:0.4rem 0 0 0;">
                 Ask questions from Leave, IT, and Travel policies. Answers are retrieved from policy documents only.
             </p>
-            <span class="badge">Hybrid retrieval with TF-IDF fallback</span>
+            <span class="badge">Hybrid retrieval: LSA + TF-IDF</span>
         </div>
         """,
         unsafe_allow_html=True,
