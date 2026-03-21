@@ -19,7 +19,7 @@ POLICY_FILES = {
 FALLBACK_MESSAGE = "Information not available in policy documents."
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
-BASE_SCORE_THRESHOLD = 0.25
+BASE_SCORE_THRESHOLD = 0.12
 PROCESS_QUERY_PATTERN = re.compile(r"\b(how|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
 PROCESS_DETAIL_PATTERN = re.compile(
     r"\b(step|submit|apply|form|portal|workflow|email|request|approval chain|approver)\b",
@@ -29,10 +29,20 @@ PROCESS_DETAIL_PATTERN = re.compile(
 QUERY_EXPANSIONS = {
     "manager": ["managerial", "approval authority"],
     "approval": ["approve", "authorization", "sign-off"],
+    "approve": ["approval", "authorization", "sign-off"],
     "remote": ["work from home", "wfh"],
     "reimbursement": ["claim", "refund"],
     "international": ["abroad", "overseas"],
+    "abroad": ["international", "overseas"],
+    "overseas": ["international", "abroad"],
+    "travel": ["trip", "journey"],
     "leave": ["time off", "vacation"],
+}
+
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "i", "in", "is",
+    "it", "me", "my", "of", "on", "or", "that", "the", "to", "was", "what", "when", "where",
+    "who", "why", "with", "do", "does", "can", "should", "necessary", "need", "required", "going",
 }
 
 
@@ -78,24 +88,33 @@ def cosine_sim_sparse(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float
 
 
 def semantic_token_set(question: str) -> Set[str]:
+    lowered = question.lower()
     tokens = set(tokenize(question))
-    expanded = set(tokens)
+    expanded = {t for t in tokens if t not in STOPWORDS and len(t) > 2}
+
     for term, replacements in QUERY_EXPANSIONS.items():
-        if term in tokens or term in question.lower():
-            expanded.add(term)
+        replacement_tokens = set()
+        for replacement in replacements:
+            replacement_tokens.update(tokenize(replacement))
+
+        if term in lowered or term in tokens or any(rep in lowered for rep in replacements) or any(rt in tokens for rt in replacement_tokens):
+            expanded.update(tokenize(term))
             for replacement in replacements:
                 expanded.update(tokenize(replacement))
+
     return expanded
 
 
 def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> float:
     if not query_tokens or not chunk_tokens:
         return 0.0
-    intersection = len(query_tokens.intersection(chunk_tokens))
-    union = len(query_tokens.union(chunk_tokens))
-    if union == 0:
+
+    chunk_filtered = {token for token in chunk_tokens if token not in STOPWORDS and len(token) > 2}
+    if not chunk_filtered:
         return 0.0
-    return intersection / union
+
+    intersection = len(query_tokens.intersection(chunk_filtered))
+    return intersection / max(1, len(query_tokens))
 
 
 @st.cache_data
@@ -250,7 +269,7 @@ def render_ui() -> None:
             <p style="margin:0.4rem 0 0 0;">
                 Ask questions from Leave, IT, and Travel policies. Answers are retrieved from policy documents only.
             </p>
-            <span class="badge">Hybrid retrieval: LSA + TF-IDF</span>
+            <span class="badge">Hybrid retrieval: semantic expansion + TF-IDF</span>
         </div>
         """,
         unsafe_allow_html=True,
