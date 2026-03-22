@@ -372,12 +372,8 @@ def find_best_match(question: str):
     if not best:
         return None
 
-    answer_lines = [best["sentence"]]
-    if query_type == "process":
-        answer_lines.append("(Note: For detailed steps, please contact HR.)")
-
     return {
-        "answer": "\n".join(answer_lines),
+        "answer": best["sentence"],
         "document": best["document"],
         "document_file": best["document_file"],
         "score": float(best["hybrid_score"]),
