@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from collections import Counter
-from typing import Dict, List, Set
+from typing import Dict, List
 
 import streamlit as st
 
@@ -19,32 +19,83 @@ POLICY_FILES = {
 FALLBACK_MESSAGE = "Information not available in policy documents."
 SEMANTIC_WEIGHT = 0.7
 TFIDF_WEIGHT = 0.3
-BASE_SCORE_THRESHOLD = 0.12
-PROCESS_QUERY_PATTERN = re.compile(r"\b(how\s+(to|can|do)|step[-\s]?by[-\s]?step|process|procedure|kaise)\b", re.IGNORECASE)
-QUANT_QUERY_PATTERN = re.compile(r"\bhow\s+many\b", re.IGNORECASE)
+RELEVANCE_THRESHOLD = 0.25
+
+PROCESS_QUERY_PATTERN = re.compile(
+    r"\b(how\s+do|how\s+can|how\s+to|what\s+is\s+the\s+process|"
+    r"steps?\s+to|procedure\s+for|process\s+of|apply\s+for)\b",
+    re.IGNORECASE,
+)
+HOW_MANY_PATTERN = re.compile(
+    r"\b(how\s+many|how\s+much|what\s+is\s+the\s+(number|count|limit|maximum|total)|"
+    r"how\s+long|number\s+of|total\s+number)\b",
+    re.IGNORECASE,
+)
 PROCESS_DETAIL_PATTERN = re.compile(
-    r"\b(step|submit|apply|form|portal|workflow|email|request|approval chain|approver)\b",
+    r"\b(explain|describe|tell\s+me\s+about|what\s+are\s+the\s+rules|"
+    r"guidelines\s+for|rules\s+for|requirements\s+for)\b",
     re.IGNORECASE,
 )
 
-QUERY_EXPANSIONS = {
-    "manager": ["managerial", "approval authority"],
-    "managerial": ["manager", "approval authority"],
-    "approval": ["approve", "authorization", "sign-off"],
-    "approve": ["approval", "authorization", "sign-off"],
-    "remote": ["work from home", "wfh"],
-    "reimbursement": ["claim", "refund"],
-    "international": ["abroad", "overseas"],
-    "abroad": ["international", "overseas"],
-    "overseas": ["international", "abroad"],
-    "travel": ["trip", "journey"],
-    "leave": ["time off", "vacation"],
+QUERY_EXPANSION = {
+    "leave": ["leave", "entitlement", "days", "paid", "annual"],
+    "vacation": ["leave", "paid", "annual"],
+    "holiday": ["leave", "paid", "casual"],
+    "sick": ["sick", "leave", "medical", "days"],
+    "maternity": ["maternity", "leave", "weeks"],
+    "casual": ["casual", "leave", "consecutive", "days"],
+    "carry": ["carry", "forward", "unused", "leave"],
+    "unused": ["unused", "carry", "forward", "leave"],
+    "days": ["days", "leave", "entitlement", "per", "year"],
+    "annual": ["yearly", "per", "year", "entitlement"],
+    "travel": ["travel", "flight", "hotel", "reimbursement", "booking", "expense"],
+    "flight": ["flight", "booking", "economy", "class"],
+    "hotel": ["hotel", "reimbursement", "night", "limit"],
+    "reimbursement": ["reimbursement", "claim", "expense", "reimburse"],
+    "reimburse": ["reimbursement", "claim", "expense"],
+    "expense": ["expense", "reimbursement", "personal", "claim"],
+    "international": ["international", "travel", "approval", "managerial", "abroad", "overseas"],
+    "abroad": ["international", "travel", "overseas", "managerial", "approval"],
+    "overseas": ["international", "travel", "abroad", "managerial", "approval"],
+    "local": ["local", "travel", "bills", "claim"],
+    "bill": ["bills", "claim", "local", "travel"],
+    "bills": ["bills", "claim", "local", "travel"],
+    "vpn": ["vpn", "remote", "access", "mandatory"],
+    "remote": ["remote", "vpn", "access", "work"],
+    "password": ["password", "share", "employees"],
+    "laptop": ["laptop", "company", "issued", "official"],
+    "antivirus": ["antivirus", "software", "devices", "updated"],
+    "usb": ["usb", "external", "devices", "approval"],
+    "device": ["devices", "antivirus", "usb", "external"],
+    "devices": ["devices", "antivirus", "usb", "external"],
+    "approval": ["approval", "managerial", "international", "usb", "it", "permission"],
+    "permission": ["approval", "managerial", "prior", "authorized", "authorisation"],
+    "manager": ["managerial", "approval", "manager", "prior"],
+    "managerial": ["managerial", "approval", "international"],
+    "required": ["requires", "mandatory", "must", "approval", "prior"],
+    "requires": ["required", "mandatory", "approval", "prior"],
+    "process": ["process", "procedure", "how", "apply", "get"],
+    "apply": ["apply", "process", "how", "take"],
+    "policy": ["policy", "rule", "guideline"],
+    "allowed": ["allowed", "mandatory", "must", "not"],
+    "how": ["how", "process", "procedure", "step"],
+    "many": ["many", "number", "entitlement", "days", "limit"],
+    "much": ["many", "number", "entitlement", "days", "limit"],
+    "limit": ["limit", "maximum", "entitlement", "cap"],
+    "maximum": ["maximum", "limit", "consecutive", "cap"],
 }
 
 STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "i", "in", "is",
-    "it", "me", "my", "of", "on", "or", "that", "the", "to", "was", "what", "when", "where",
-    "who", "why", "with", "do", "does", "can", "should", "necessary", "need", "required", "going",
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
+    "on", "with", "at", "by", "from", "and", "or", "but", "not", "no",
+    "so", "if", "as", "that", "this", "it", "its", "my", "your", "our",
+    "their", "i", "we", "you", "he", "she", "they", "what", "which",
+    "who", "how", "when", "where", "why", "me", "us", "him", "her", "them",
+    "about", "than", "up", "out", "per", "must", "all", "any", "more",
+    "also", "into", "through", "during", "before", "after", "there",
+    "then", "just", "because", "while", "although",
 }
 
 
@@ -56,10 +107,29 @@ class PolicyChunk:
 
 
 def tokenize(text: str) -> List[str]:
-    return re.findall(r"[a-zA-Z0-9]+", text.lower())
+    tokens = re.findall(r"[a-zA-Z]+", text.lower())
+    return [token for token in tokens if token not in STOPWORDS and len(token) >= 2]
 
 
-def build_tfidf_vector(tokens: List[str], idf_map: Dict[str, float]) -> Dict[str, float]:
+def split_into_sentences(text: str) -> List[str]:
+    sentences: List[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        cleaned = re.sub(r"^\s*(?:\d+[\.)]\s*|[-•]\s*)", "", line).strip()
+        if len(cleaned) <= 5:
+            continue
+
+        if cleaned.lower().endswith("policy") and len(cleaned.split()) <= 3:
+            continue
+
+        sentences.append(cleaned)
+    return sentences
+
+
+def build_tfidf_vector(tokens: List[str], idf_map: Dict[str, float], default_idf: float = 1.0) -> Dict[str, float]:
     if not tokens:
         return {}
 
@@ -67,10 +137,8 @@ def build_tfidf_vector(tokens: List[str], idf_map: Dict[str, float]) -> Dict[str
     total_terms = len(tokens)
     vector: Dict[str, float] = {}
     for token, count in term_counts.items():
-        if token not in idf_map:
-            continue
         tf = count / total_terms
-        vector[token] = tf * idf_map[token]
+        vector[token] = tf * idf_map.get(token, default_idf)
     return vector
 
 
@@ -89,34 +157,37 @@ def cosine_sim_sparse(vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float
     return dot / (norm_a * norm_b)
 
 
-def semantic_token_set(question: str) -> Set[str]:
-    lowered = question.lower()
-    tokens = set(tokenize(question))
-    expanded = {t for t in tokens if t not in STOPWORDS and len(t) > 2}
-
-    for term, replacements in QUERY_EXPANSIONS.items():
-        replacement_tokens = set()
-        for replacement in replacements:
-            replacement_tokens.update(tokenize(replacement))
-
-        if term in lowered or term in tokens or any(rep in lowered for rep in replacements) or any(rt in tokens for rt in replacement_tokens):
-            expanded.add(term)
-
+def expand_query(tokens: List[str]) -> List[str]:
+    expanded = list(tokens)
+    seen = set(tokens)
+    for token in tokens:
+        for extra in QUERY_EXPANSION.get(token, []):
+            if extra not in seen:
+                expanded.append(extra)
+                seen.add(extra)
     return expanded
 
 
-def semantic_overlap_score(query_tokens: Set[str], chunk_tokens: Set[str]) -> float:
+def semantic_overlap_score(query_tokens: List[str], chunk_tokens: List[str]) -> float:
     if not query_tokens or not chunk_tokens:
         return 0.0
 
-    chunk_filtered = {token for token in chunk_tokens if token not in STOPWORDS and len(token) > 2}
-    if not chunk_filtered:
+    query_set = set(query_tokens)
+    chunk_set = set(chunk_tokens)
+    if not query_set or not chunk_set:
         return 0.0
 
-    intersection = len(query_tokens.intersection(chunk_filtered))
-    coverage = intersection / max(1, len(query_tokens))
-    precision = intersection / max(1, len(chunk_filtered))
-    return min(1.0, (0.75 * coverage) + (0.25 * precision))
+    return (2 * len(query_set & chunk_set)) / (len(query_set) + len(chunk_set))
+
+
+def check_process_query(question: str) -> str:
+    if PROCESS_QUERY_PATTERN.search(question):
+        return "process"
+    if HOW_MANY_PATTERN.search(question):
+        return "quantity"
+    if PROCESS_DETAIL_PATTERN.search(question):
+        return "detail"
+    return "general"
 
 
 @st.cache_data
@@ -129,110 +200,122 @@ def load_policy_chunks() -> List[PolicyChunk]:
             continue
 
         raw_text = file_path.read_text(encoding="utf-8", errors="ignore")
-        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-
-        for line in lines:
-            if line.lower().endswith("policy"):
-                continue
-            cleaned = re.sub(r"^\d+\.\s*", "", line).strip()
-            if cleaned:
+        for sentence in split_into_sentences(raw_text):
+            if sentence:
                 chunks.append(
                     PolicyChunk(
                         document_file=file_name,
                         document_name=doc_name,
-                        text=cleaned,
+                        text=sentence,
                     )
                 )
 
     return chunks
 
 
+class TFIDFEngine:
+    def __init__(self) -> None:
+        self.corpus_texts: List[str] = []
+        self.doc_labels: List[str] = []
+        self.corpus_tokens: List[List[str]] = []
+        self.idf: Dict[str, float] = {}
+        self.tfidf_vectors: List[Dict[str, float]] = []
+
+    def fit(self, sentences: List[str], labels: List[str]) -> None:
+        self.corpus_texts = sentences
+        self.doc_labels = labels
+        self.corpus_tokens = [tokenize(sentence) for sentence in sentences]
+        total_docs = len(self.corpus_tokens)
+
+        doc_freq: Counter = Counter()
+        for tokens in self.corpus_tokens:
+            doc_freq.update(set(tokens))
+
+        self.idf = {
+            token: math.log((1 + total_docs) / (1 + frequency)) + 1.0
+            for token, frequency in doc_freq.items()
+        }
+
+        self.tfidf_vectors = [build_tfidf_vector(tokens, self.idf, default_idf=1.0) for tokens in self.corpus_tokens]
+
+    def _sparse_cosine(self, vec_a: Dict[str, float], vec_b: Dict[str, float]) -> float:
+        return cosine_sim_sparse(vec_a, vec_b)
+
+    def query_vector(self, query_tokens: List[str]) -> Dict[str, float]:
+        return build_tfidf_vector(query_tokens, self.idf, default_idf=0.5)
+
+    def tfidf_scores(self, query_tokens: List[str]) -> List[float]:
+        query_vec = self.query_vector(query_tokens)
+        return [self._sparse_cosine(query_vec, vector) for vector in self.tfidf_vectors]
+
+
 @st.cache_resource
-def build_retriever(chunks: List[PolicyChunk]):
-    tokenized_chunks: List[List[str]] = [tokenize(chunk.text) for chunk in chunks]
+def build_retriever():
+    chunks = load_policy_chunks()
+    engine = TFIDFEngine()
+    engine.fit([chunk.text for chunk in chunks], [chunk.document_file for chunk in chunks])
+    return chunks, engine
 
-    doc_freq: Counter = Counter()
-    for tokens in tokenized_chunks:
-        doc_freq.update(set(tokens))
+def pick_best_result(question: str, query_type: str, results: List[dict]) -> dict | None:
+    if not results:
+        return None
 
-    total_docs = len(tokenized_chunks)
-    idf_map: Dict[str, float] = {}
-    for token, frequency in doc_freq.items():
-        idf_map[token] = math.log((1 + total_docs) / (1 + frequency)) + 1.0
+    query_tokens = set(tokenize(question))
+    if query_type == "quantity" and "leave" in query_tokens:
+        for item in results:
+            sentence_lower = item["sentence"].lower()
+            if any(keyword in sentence_lower for keyword in ["entitled", "entitlement", "per year", "days per year", "paid leaves"]):
+                return item
 
-    chunk_tfidf_vectors = [build_tfidf_vector(tokens, idf_map) for tokens in tokenized_chunks]
-    chunk_token_sets = [set(tokens) for tokens in tokenized_chunks]
-
-    return idf_map, chunk_tfidf_vectors, chunk_token_sets
-
-
-def build_query_variants(question: str) -> List[str]:
-    lowered = question.lower().strip()
-    variants = {lowered}
-
-    for term, replacements in QUERY_EXPANSIONS.items():
-        if term in lowered:
-            for replacement in replacements:
-                variants.add(lowered.replace(term, replacement))
-
-    return list(variants)
-
-
-def is_answer_adequate(question: str, answer_text: str, score: float) -> bool:
-    if score < BASE_SCORE_THRESHOLD:
-        return False
-
-    is_quant_query = QUANT_QUERY_PATTERN.search(question) is not None
-    is_process_query = PROCESS_QUERY_PATTERN.search(question) is not None
-
-    if is_process_query and not is_quant_query:
-        return PROCESS_DETAIL_PATTERN.search(answer_text) is not None
-
-    return True
+    return results[0]
 
 
 def find_best_match(question: str):
-    chunks = load_policy_chunks()
+    chunks, engine = build_retriever()
     if not chunks:
         return None
 
-    idf_map, chunk_tfidf_vectors, chunk_token_sets = build_retriever(chunks)
-    query_variants = build_query_variants(question)
+    query_type = check_process_query(question)
+    expanded_tokens = expand_query(tokenize(question))
+    tfidf_scores = engine.tfidf_scores(expanded_tokens)
 
-    tfidf_scores = [0.0] * len(chunks)
-    semantic_scores = [0.0] * len(chunks)
+    results: List[dict] = []
+    for idx, chunk in enumerate(chunks):
+        semantic_score = semantic_overlap_score(expanded_tokens, engine.corpus_tokens[idx])
+        tfidf_score = tfidf_scores[idx]
+        hybrid_score = (SEMANTIC_WEIGHT * semantic_score) + (TFIDF_WEIGHT * tfidf_score)
 
-    for variant in query_variants:
-        query_tokens = tokenize(variant)
-        query_tfidf_vector = build_tfidf_vector(query_tokens, idf_map)
-        expanded_tokens = semantic_token_set(variant)
+        if hybrid_score >= RELEVANCE_THRESHOLD:
+            results.append(
+                {
+                    "sentence": chunk.text,
+                    "doc_label": chunk.document_file,
+                    "document": chunk.document_name,
+                    "document_file": chunk.document_file,
+                    "hybrid_score": round(hybrid_score, 4),
+                    "semantic_score": round(semantic_score, 4),
+                    "tfidf_score": round(tfidf_score, 4),
+                }
+            )
 
-        for idx in range(len(chunks)):
-            tfidf_score = cosine_sim_sparse(query_tfidf_vector, chunk_tfidf_vectors[idx])
-            semantic_score = semantic_overlap_score(expanded_tokens, chunk_token_sets[idx])
-            tfidf_scores[idx] = max(tfidf_scores[idx], tfidf_score)
-            semantic_scores[idx] = max(semantic_scores[idx], semantic_score)
-
-    blended_scores = [
-        (SEMANTIC_WEIGHT * semantic_scores[idx]) + (TFIDF_WEIGHT * tfidf_scores[idx])
-        for idx in range(len(chunks))
-    ]
-
-    best_idx = max(range(len(chunks)), key=lambda i: blended_scores[i])
-    best_score = float(blended_scores[best_idx])
-
-    best_chunk = chunks[best_idx]
-    if not is_answer_adequate(question, best_chunk.text, best_score):
+    results.sort(key=lambda item: item["hybrid_score"], reverse=True)
+    best = pick_best_result(question, query_type, results[:5])
+    if not best:
         return None
 
+    answer_lines = [best["sentence"]]
+    if query_type == "process":
+        answer_lines.append("(Note: For detailed steps, please contact HR.)")
+
     return {
-        "answer": best_chunk.text,
-        "document": best_chunk.document_name,
-        "document_file": best_chunk.document_file,
-        "score": best_score,
-        "semantic_score": float(semantic_scores[best_idx]),
-        "tfidf_score": float(tfidf_scores[best_idx]),
+        "answer": "\n".join(answer_lines),
+        "document": best["document"],
+        "document_file": best["document_file"],
+        "score": float(best["hybrid_score"]),
+        "semantic_score": float(best["semantic_score"]),
+        "tfidf_score": float(best["tfidf_score"]),
         "retrieval_mode": "hybrid",
+        "query_type": query_type,
     }
 
 

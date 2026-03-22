@@ -1,0 +1,52 @@
+[
+  {
+    "question": "Is VPN mandatory for remote work?",
+    "answer": "VPN is mandatory for remote work access.",
+    "document": "IT Policy",
+    "document_file": "it_policy.txt",
+    "score": 0.9381481616810878,
+    "semantic_score": 0.95,
+    "tfidf_score": 0.910493872270293,
+    "retrieval_mode": "hybrid"
+  },
+  {
+    "question": "How many sick leaves can employee take?",
+    "answer": "Sick leave entitlement is 10 days per year.",
+    "document": "Leave Policy",
+    "document_file": "leave_policy.txt",
+    "score": 0.3195851287298983,
+    "semantic_score": 0.3333333333333333,
+    "tfidf_score": 0.2875059846552167,
+    "retrieval_mode": "hybrid"
+  },
+  {
+    "question": "What is hotel reimbursement cap?",
+    "answer": "Hotel reimbursement limit is Rs. 5000 per night.",
+    "document": "Travel Policy",
+    "document_file": "travel_policy.txt",
+    "score": 0.5861928209882141,
+    "semantic_score": 0.5833333333333334,
+    "tfidf_score": 0.5928649588496028,
+    "retrieval_mode": "hybrid"
+  },
+  {
+    "question": "How to apply for approval step-by-step?",
+    "answer": "Information not available in policy documents.",
+    "document": "N/A",
+    "document_file": "N/A",
+    "score": 0.0,
+    "semantic_score": 0.0,
+    "tfidf_score": 0.0,
+    "retrieval_mode": "fallback"
+  },
+  {
+    "question": "What is dress code policy?",
+    "answer": "Information not available in policy documents.",
+    "document": "N/A",
+    "document_file": "N/A",
+    "score": 0.0,
+    "semantic_score": 0.0,
+    "tfidf_score": 0.0,
+    "retrieval_mode": "fallback"
+  }
+]

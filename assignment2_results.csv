@@ -1,0 +1,6 @@
+question,answer,document,document_file,score,semantic_score,tfidf_score,retrieval_mode
+Is VPN mandatory for remote work?,VPN is mandatory for remote work access.,IT Policy,it_policy.txt,0.9381481616810878,0.95,0.910493872270293,hybrid
+How many sick leaves can employee take?,Sick leave entitlement is 10 days per year.,Leave Policy,leave_policy.txt,0.3195851287298983,0.3333333333333333,0.2875059846552167,hybrid
+What is hotel reimbursement cap?,Hotel reimbursement limit is Rs. 5000 per night.,Travel Policy,travel_policy.txt,0.5861928209882141,0.5833333333333334,0.5928649588496028,hybrid
+How to apply for approval step-by-step?,Information not available in policy documents.,N/A,N/A,0.0,0.0,0.0,fallback
+What is dress code policy?,Information not available in policy documents.,N/A,N/A,0.0,0.0,0.0,fallback
