@@ -47,6 +47,7 @@ PROCESS_DETAIL_PATTERN = re.compile(
 
 QUERY_EXPANSION = {
     "leave": ["leave", "entitlement", "days", "paid", "annual"],
+    "leaves": ["leave", "entitlement", "days", "paid", "annual"],
     "vacation": ["leave", "paid", "annual"],
     "holiday": ["leave", "paid", "casual"],
     "sick": ["sick", "leave", "medical", "days"],
@@ -116,7 +117,13 @@ class PolicyChunk:
 
 def tokenize(text: str) -> List[str]:
     tokens = re.findall(r"[a-zA-Z]+", text.lower())
-    return [token for token in tokens if token not in STOPWORDS and len(token) >= 2]
+    normalized: List[str] = []
+    for token in tokens:
+        if token == "leaves":
+            token = "leave"
+        if token not in STOPWORDS and len(token) >= 2:
+            normalized.append(token)
+    return normalized
 
 
 def split_into_sentences(text: str) -> List[str]:
@@ -304,7 +311,26 @@ def pick_best_result(question: str, query_type: str, results: List[dict]) -> dic
         return None
 
     query_tokens = set(tokenize(question))
-    if query_type == "quantity" and "leave" in query_tokens:
+    if query_type == "quantity" and ("leave" in query_tokens or "leaves" in query_tokens):
+        specific_leave_types = {"sick", "maternity", "casual"}
+        is_generic_leave_query = len(query_tokens.intersection(specific_leave_types)) == 0
+
+        if is_generic_leave_query:
+            for item in results:
+                sentence_lower = item["sentence"].lower()
+                if "paid leaves" in sentence_lower or "paid leave" in sentence_lower:
+                    return item
+
+            for item in results:
+                sentence_lower = item["sentence"].lower()
+                if (
+                    "entitled" in sentence_lower
+                    and "leave" in sentence_lower
+                    and "per year" in sentence_lower
+                    and not any(term in sentence_lower for term in ["sick", "maternity", "casual"])
+                ):
+                    return item
+
         for item in results:
             sentence_lower = item["sentence"].lower()
             if any(keyword in sentence_lower for keyword in ["entitled", "entitlement", "per year", "days per year", "paid leaves"]):
