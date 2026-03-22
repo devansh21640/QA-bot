@@ -283,12 +283,12 @@ def render_ui() -> None:
     col1, col2 = st.columns([2.2, 1])
 
     with col1:
-        question = st.text_input(
-            "Enter your question",
-            placeholder="Example: Is VPN mandatory for remote work?",
-        )
-
-        ask_clicked = st.button("Get Answer", type="primary", use_container_width=True)
+        with st.form("policy_qa_form", clear_on_submit=False):
+            question = st.text_input(
+                "Enter your question",
+                placeholder="Example: Is VPN mandatory for remote work?",
+            )
+            ask_clicked = st.form_submit_button("Get Answer", type="primary", use_container_width=True)
 
         if ask_clicked:
             if not question.strip():

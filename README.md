@@ -1,50 +1,65 @@
-# Assignment 2 - Simple Policy Q&A Bot
+# Assignment 2: Policy Q&A Bot
 
-This project implements Assignment 2 using the provided policy documents:
+## Overview
+This project implements a policy question-answering system using the provided documents:
 - `leave_policy.txt`
 - `it_policy.txt`
 - `travel_policy.txt`
 
-## Retrieval Approach
-- Hybrid retrieval: semantic intent expansion + TF-IDF cosine similarity
-- Hybrid mode is mandatory in this app (semantic + TF-IDF always enabled)
-- Retrieval-first answering from policy text only
+The app follows a **retrieval-first** approach and answers only from policy content.
 
-## Required Assignment Compliance
-- Displays source document used to answer
-- Returns exact fallback when information is missing:
+## Key Features
+- Hybrid retrieval: **semantic intent expansion + TF-IDF similarity**
+- Displays the **source document** used for answer generation
+- Returns exact fallback when information is not found:
   - `Information not available in policy documents.`
-- No paid APIs
-- CPU-only runtime (no GPU large model required)
+- Clean Streamlit UI for evaluation/demo
+- CPU-friendly implementation (no paid APIs, no GPU models)
 
-## Run Locally
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Start app:
-   ```bash
-   streamlit run app.py
-   ```
+## Retrieval Design
+1. Parse policy rules into searchable chunks.
+2. Build query variants using intent/synonym expansion.
+3. Compute:
+   - semantic overlap score
+   - TF-IDF score
+4. Combine scores using weighted hybrid scoring:
+   - `Hybrid = 0.7 * Semantic + 0.3 * TF-IDF`
+5. Apply adequacy checks:
+   - confident match required
+   - procedural queries without process details return fallback
 
-## Deploy (Streamlit Community Cloud)
-1. Push this folder to GitHub.
-2. Open Streamlit Community Cloud and create a new app.
-3. Set:
+## Assignment Compliance Checklist
+- ✅ Retrieval from policy documents before answering
+- ✅ Exact fallback response for missing information
+- ✅ Source document shown with each answer
+- ✅ No paid API usage
+- ✅ Runs on CPU
+
+## Local Run
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+## Deployment (Streamlit Community Cloud)
+1. Push this repository to GitHub.
+2. Create a new app on Streamlit Community Cloud.
+3. Use:
    - Main file path: `app.py`
-   - Python version: `3.12` (pinned via `runtime.txt`)
-4. Click Deploy.
+   - Branch: `main`
+4. Deploy.
 
-### Note for Cloud Deploy
-- Semantic layer uses lightweight rule-based intent expansion.
-- Deployment is fast and reliable on Streamlit Cloud (no heavy ML package build).
+## Live Demo
+- https://policy-bot-devansh.streamlit.app/
 
-## Deployment-Ready Files in Repo
-- `app.py`
-- `requirements.txt`
-- `README.md`
-- `.gitignore`
-- `runtime.txt`
-- `leave_policy.txt`
-- `it_policy.txt`
-- `travel_policy.txt`
+## Sample Validation Queries
+- `Is VPN mandatory for remote work?`
+- `How many sick leaves can employee take?`
+- `What is hotel reimbursement cap?`
+- `How to apply for approval step-by-step?` → should return fallback
+
+## Project Files
+- `app.py` — Streamlit app and retrieval logic
+- `requirements.txt` — dependencies
+- `runtime.txt` / `.python-version` — runtime hints
+- `leave_policy.txt`, `it_policy.txt`, `travel_policy.txt` — source policies
