@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import math
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from collections import Counter
@@ -11,6 +12,13 @@ import streamlit as st
 
 
 BASE_DIR = Path(__file__).resolve().parent
+USE_DRIVE = True
+DRIVE_FILES = {
+    "leave_policy.txt": "https://drive.google.com/file/d/17V-2ryfPQQ-KKhlLF_SCPMKVU2v8Kqyg/view?usp=sharing",
+    "it_policy.txt": "https://drive.google.com/file/d/1FBWWZgAfYkBo5Z_I4RHSRraVnzaNh7XT/view?usp=sharing",
+    "travel_policy.txt": "https://drive.google.com/file/d/1FqUPC2ExAw9dUOYTWzPRtP3SFL51y953/view?usp=sharing",
+}
+
 POLICY_FILES = {
     "leave_policy.txt": "Leave Policy",
     "it_policy.txt": "IT Policy",
@@ -129,6 +137,40 @@ def split_into_sentences(text: str) -> List[str]:
     return sentences
 
 
+def parse_drive_url(share_url: str) -> str:
+    match = re.search(r"/file/d/([a-zA-Z0-9_-]+)", share_url)
+    if match:
+        return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
+
+    match = re.search(r"[?&]id=([a-zA-Z0-9_-]+)", share_url)
+    if match:
+        return f"https://drive.google.com/uc?export=download&id={match.group(1)}"
+
+    raise ValueError(f"Cannot parse Google Drive URL: {share_url}")
+
+
+def load_policy_file(filename: str) -> str | None:
+    if USE_DRIVE and filename in DRIVE_FILES:
+        share_url = DRIVE_FILES[filename]
+        try:
+            direct_url = parse_drive_url(share_url)
+            request = urllib.request.Request(direct_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                content = response.read().decode("utf-8", errors="ignore")
+            if content.strip():
+                return content
+        except Exception:
+            pass
+
+    local_path = BASE_DIR / filename
+    if local_path.exists():
+        content = local_path.read_text(encoding="utf-8", errors="ignore")
+        if content.strip():
+            return content
+
+    return None
+
+
 def build_tfidf_vector(tokens: List[str], idf_map: Dict[str, float], default_idf: float = 1.0) -> Dict[str, float]:
     if not tokens:
         return {}
@@ -194,12 +236,13 @@ def check_process_query(question: str) -> str:
 def load_policy_chunks() -> List[PolicyChunk]:
     chunks: List[PolicyChunk] = []
 
-    for file_name, doc_name in POLICY_FILES.items():
-        file_path = BASE_DIR / file_name
-        if not file_path.exists():
+    required_files = ["leave_policy.txt", "it_policy.txt", "travel_policy.txt"]
+    for file_name in required_files:
+        doc_name = POLICY_FILES[file_name]
+        raw_text = load_policy_file(file_name)
+        if raw_text is None:
             continue
 
-        raw_text = file_path.read_text(encoding="utf-8", errors="ignore")
         for sentence in split_into_sentences(raw_text):
             if sentence:
                 chunks.append(
