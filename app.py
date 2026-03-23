@@ -312,9 +312,35 @@ def pick_best_result(question: str, query_type: str, results: List[dict]) -> dic
         return None
 
     query_tokens = set(tokenize(question))
-    if query_type == "quantity" and ("leave" in query_tokens or "leaves" in query_tokens):
-        specific_leave_types = {"sick", "maternity", "casual"}
-        is_generic_leave_query = len(query_tokens.intersection(specific_leave_types)) == 0
+    specific_leave_types = {"sick", "maternity", "casual"}
+
+    has_leave_intent = "leave" in query_tokens or "leaves" in query_tokens
+    has_paid_leave_intent = has_leave_intent and bool(query_tokens.intersection({"paid", "free", "entitlement"}))
+    is_generic_leave_query = len(query_tokens.intersection(specific_leave_types)) == 0
+
+    if has_paid_leave_intent and is_generic_leave_query:
+        disallowed_terms = {"sick", "maternity", "casual", "unused", "carry", "forward", "consecutive", "weeks"}
+
+        for item in results:
+            sentence_lower = item["sentence"].lower()
+            if (
+                ("paid leaves" in sentence_lower or "paid leave" in sentence_lower)
+                and "entitled" in sentence_lower
+                and "per year" in sentence_lower
+                and re.search(r"\b\d+\b", sentence_lower)
+                and not any(term in sentence_lower for term in disallowed_terms)
+            ):
+                return item
+
+        for item in results:
+            sentence_lower = item["sentence"].lower()
+            if (
+                ("paid leaves" in sentence_lower or "paid leave" in sentence_lower)
+                and not any(term in sentence_lower for term in disallowed_terms)
+            ):
+                return item
+
+    if query_type == "quantity" and has_leave_intent:
 
         if is_generic_leave_query:
             disallowed_terms = {"sick", "maternity", "casual", "unused", "carry", "forward", "consecutive", "weeks"}
