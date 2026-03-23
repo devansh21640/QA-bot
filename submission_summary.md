@@ -1,11 +1,7 @@
 # Assignment 2 – Policy Q&A Bot (Final Summary)
 
 ## Live Deployment (Top Priority)
-> ## 🔗 LIVE DEMO (PLEASE REVIEW)
-> ### https://policy-bot-devansh.streamlit.app/
-> **Note for Evaluator:** This assignment did not require deployment, but I have deployed it to make evaluation easier.
-
-**Deployed Site:** https://policy-bot-devansh.streamlit.app/
+**Live demo:** https://policy-bot-devansh.streamlit.app/
 
 ## Executive Snapshot
 This implementation is a **retrieval-first, policy-grounded Q&A bot** that answers strictly from provided policy documents and blocks unsupported responses with an exact fallback.
@@ -65,7 +61,7 @@ The query classifier routes prompts into: `process`, `quantity`, `detail`, `gene
 Guardrails applied:
 - procedural question without procedural evidence → fallback,
 - low match confidence → fallback,
-- process-style answers include safety note (contact HR for detailed workflow).
+- responses are kept concise and limited to policy-grounded text.
 
 These constraints reduce hallucination risk and keep the bot policy-compliant.
 

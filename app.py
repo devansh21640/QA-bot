@@ -50,6 +50,7 @@ QUERY_EXPANSION = {
     "leaves": ["leave", "entitlement", "days", "paid", "annual"],
     "vacation": ["leave", "paid", "annual"],
     "holiday": ["leave", "paid", "casual"],
+    "free": ["paid", "leave", "entitlement", "days"],
     "sick": ["sick", "leave", "medical", "days"],
     "maternity": ["maternity", "leave", "weeks"],
     "casual": ["casual", "leave", "consecutive", "days"],
@@ -316,9 +317,24 @@ def pick_best_result(question: str, query_type: str, results: List[dict]) -> dic
         is_generic_leave_query = len(query_tokens.intersection(specific_leave_types)) == 0
 
         if is_generic_leave_query:
+            disallowed_terms = {"sick", "maternity", "casual", "unused", "carry", "forward", "consecutive", "weeks"}
+
             for item in results:
                 sentence_lower = item["sentence"].lower()
-                if "paid leaves" in sentence_lower or "paid leave" in sentence_lower:
+                if (
+                    ("paid leaves" in sentence_lower or "paid leave" in sentence_lower)
+                    and re.search(r"\b\d+\b", sentence_lower)
+                    and "per year" in sentence_lower
+                    and not any(term in sentence_lower for term in disallowed_terms)
+                ):
+                    return item
+
+            for item in results:
+                sentence_lower = item["sentence"].lower()
+                if (
+                    ("paid leaves" in sentence_lower or "paid leave" in sentence_lower)
+                    and not any(term in sentence_lower for term in disallowed_terms)
+                ):
                     return item
 
             for item in results:
@@ -327,7 +343,7 @@ def pick_best_result(question: str, query_type: str, results: List[dict]) -> dic
                     "entitled" in sentence_lower
                     and "leave" in sentence_lower
                     and "per year" in sentence_lower
-                    and not any(term in sentence_lower for term in ["sick", "maternity", "casual"])
+                    and not any(term in sentence_lower for term in disallowed_terms)
                 ):
                     return item
 
